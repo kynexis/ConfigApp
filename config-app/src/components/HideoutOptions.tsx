@@ -1,203 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import type { HideoutOptions, Config } from '../types/config';
-import { getOriginal, patchValue } from '../utils/configUtils';
+
+import React, { useMemo, useCallback } from 'react';
+import SectionResetButton from './SectionResetButton';
 import ConfigToggle from './ConfigToggle';
 import ConfigNumberInput from './ConfigNumberInput';
-import SectionResetButton from './SectionResetButton';
-import type { IpcRenderer } from 'electron';
+import type { HideoutOptions } from '../types/config';
+import '../AppStyles.css';
 
 interface HideoutOptionsProps {
   ho: HideoutOptions;
-  originalConfig: Config | null;
+  originalConfig: { hideoutOptions: HideoutOptions };
   filePath: string;
-  ipcRenderer: IpcRenderer;
-  setConfig: React.Dispatch<React.SetStateAction<Config | null>>;
+  ipcRenderer: unknown;
+  setConfig: (fn: (prev: unknown) => unknown) => void;
   setDirty: (dirty: boolean) => void;
   setError: (err: string) => void;
   saveConfig: () => void;
 }
 
-const HideoutOptions: React.FC<HideoutOptionsProps> = ({
-  ho,
-  originalConfig,
-  filePath,
-  ipcRenderer,
-  setConfig,
-  setDirty,
-  setError,
-  saveConfig
-}) => {
+// Field definitions for rendering, with tooltips from config.json5 comments
+const fields = [
+  { key: 'fasterBitcoinFarming.enabled', label: 'Faster Bitcoin Farming', type: 'toggle', tooltip: 'Enable/disable faster bitcoin farming' },
+  { key: 'fasterBitcoinFarming.bitcoinPrice', label: 'Bitcoin Price', type: 'number', min: 0, max: 10000000, step: 1000, tooltip: 'Set the price of bitcoin in the handbook. Default is 100000. Set to null or remove to not change price.' },
+  { key: 'fasterBitcoinFarming.baseBitcoinTimeMultiplier', label: 'Bitcoin Time Multiplier', type: 'number', min: 1, max: 1000, step: 1, tooltip: 'Base bitcoin production time multiplier (higher = faster)' },
+  { key: 'fasterBitcoinFarming.gpuEfficiency', label: 'GPU Efficiency', type: 'number', min: 1, max: 100, step: 1, tooltip: 'GPU efficiency for bitcoin farm' },
+  { key: 'fasterCraftingTime.enabled', label: 'Faster Crafting Time', type: 'toggle', tooltip: 'Enable/disable faster crafting time for all crafts except bitcoin, moonshine, and purified water' },
+  { key: 'fasterCraftingTime.baseCraftingTimeMultiplier', label: 'Crafting Time Multiplier', type: 'number', min: 1, max: 1000, step: 1, tooltip: 'Base crafting time multiplier for most crafts (higher = faster)' },
+  { key: 'fasterCraftingTime.hideoutSkillExpFix.enabled', label: 'Hideout Skill Exp Fix', type: 'toggle', tooltip: 'Enable/disable hideout skill exp fix for crafting' },
+  { key: 'fasterCraftingTime.hideoutSkillExpFix.hideoutSkillExpMultiplier', label: 'Hideout Skill Exp Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Multiplier for hideout skill exp gain from crafting' },
+  { key: 'fasterCraftingTime.fasterMoonshineProduction.enabled', label: 'Faster Moonshine Production', type: 'toggle', tooltip: 'Enable/disable faster moonshine production' },
+  { key: 'fasterCraftingTime.fasterMoonshineProduction.baseCraftingTimeMultiplier', label: 'Moonshine Time Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Base crafting time multiplier for moonshine (higher = faster)' },
+  { key: 'fasterCraftingTime.fasterPurifiedWaterProduction.enabled', label: 'Faster Purified Water', type: 'toggle', tooltip: 'Enable/disable faster purified water production' },
+  { key: 'fasterCraftingTime.fasterPurifiedWaterProduction.baseCraftingTimeMultiplier', label: 'Purified Water Time Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Base crafting time multiplier for purified water (higher = faster)' },
+  { key: 'fasterCraftingTime.fasterCultistCircle.enabled', label: 'Faster Cultist Circle', type: 'toggle', tooltip: 'Enable/disable faster cultist circle production' },
+  { key: 'fasterCraftingTime.fasterCultistCircle.baseCraftingTimeMultiplier', label: 'Cultist Circle Time Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Base crafting time multiplier for cultist circle (higher = faster)' },
+  { key: 'hideoutContainers.enabled', label: 'Hideout Containers', type: 'toggle', tooltip: 'Enable/disable hideout containers tweaks' },
+  { key: 'hideoutContainers.biggerHideoutContainers', label: 'Bigger Hideout Containers', type: 'toggle', tooltip: 'Slightly buffs basic hideout containers: Medicine case 7x7 -> 10x10, Holodilnick 8x8 -> 10x10, Magazine case 7x7 -> 7x10, Item case 8x8 -> 10x10, Weapon case 5x10 -> 6x10, Keytool -> 5x5' },
+  { key: 'hideoutContainers.siccCaseBuff', label: 'SICC Case Buff', type: 'toggle', tooltip: 'Huge QoL buff to SICC case to make it actually not bad and a direct upgrade to Docs. Allows it to hold keytools and more.' },
+  { key: 'fuelConsumption.enabled', label: 'Fuel Consumption', type: 'toggle', tooltip: 'Enable/disable fuel consumption tweaks' },
+  { key: 'fuelConsumption.fuelConsumptionMultiplier', label: 'Fuel Consumption Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Fuel consumption multiplier (higher = more fuel used)' },
+  { key: 'fasterHideoutConstruction.enabled', label: 'Faster Hideout Construction', type: 'toggle', tooltip: 'Enable/disable faster hideout construction' },
+  { key: 'fasterHideoutConstruction.hideoutConstructionTimeMultiplier', label: 'Construction Time Multiplier', type: 'number', min: 1, max: 1000, step: 1, tooltip: 'Construction time multiplier (higher = faster construction)' },
+  { key: 'scavCaseOptions.enabled', label: 'Scav Case Options', type: 'toggle', tooltip: 'Enable/disable scav case options' },
+  { key: 'scavCaseOptions.betterRewards', label: 'Better Scav Rewards', type: 'toggle', tooltip: 'Improves the quality of scav case rewards' },
+  { key: 'scavCaseOptions.rebalance', label: 'Rebalance Scav Case', type: 'toggle', tooltip: 'Rebalances the scav case reward pool and recipes' },
+  { key: 'scavCaseOptions.fasterScavcase.enabled', label: 'Faster Scavcase', type: 'toggle', tooltip: 'Enable/disable faster scavcase production' },
+  { key: 'scavCaseOptions.fasterScavcase.speedMultiplier', label: 'Scavcase Speed Multiplier', type: 'number', min: 1, max: 100, step: 1, tooltip: 'Speed multiplier for scavcase production' },
+  { key: 'allowGymTrainingWithMusclePain', label: 'Allow Gym Training With Muscle Pain', type: 'toggle', tooltip: 'Allows to continue gym training with severe muscle pain at 25% efficiency.' },
+  { key: 'disableFIRHideout', label: 'Disable FIR Hideout', type: 'toggle', tooltip: 'Disables Found In Raid requirement for hideout upgrades' },
+];
 
-  // Config field definitions for toggles and number inputs
+function getValue(obj: unknown, path: string) {
+  return path.split('.').reduce((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
+}
+function setValue(obj: unknown, path: string, value: unknown) {
+  const keys = path.split('.');
+  const last = keys.pop()!;
+  const ref = keys.reduce((o, k) => {
+    if (typeof o[k] !== 'object' || o[k] === null) o[k] = {};
+    return o[k] as Record<string, unknown>;
+  }, obj as Record<string, unknown>);
+  ref[last] = value;
+}
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
 
 
-  // Local state for number fields
-  const [localValues, setLocalValues] = useState<Record<string, number | ''>>({
-    btcPrice: ho ? (ho.fasterBitcoinFarming.bitcoinPrice ?? '') : '',
-    btcTime: ho ? ho.fasterBitcoinFarming.baseBitcoinTimeMultiplier : '',
-    gpuEff: ho ? ho.fasterBitcoinFarming.gpuEfficiency : '',
-    craftTime: ho ? ho.fasterCraftingTime.baseCraftingTimeMultiplier : '',
-  });
+const HideoutOptions: React.FC<HideoutOptionsProps> = ({ ho, originalConfig, setConfig, setDirty }) => {
+  const original = useMemo(() => originalConfig?.hideoutOptions, [originalConfig]);
 
-  useEffect(() => {
-    if (!ho) return;
-    setLocalValues({
-      btcPrice: ho.fasterBitcoinFarming.bitcoinPrice ?? '',
-      btcTime: ho.fasterBitcoinFarming.baseBitcoinTimeMultiplier,
-      gpuEff: ho.fasterBitcoinFarming.gpuEfficiency,
-      craftTime: ho.fasterCraftingTime.baseCraftingTimeMultiplier,
+  const handleChange = useCallback((key: string, value: unknown) => {
+    setConfig((prev: unknown) => {
+      const next = deepClone(prev);
+      setValue((next as Record<string, unknown>).hideoutOptions, key, value);
+      return next;
     });
-  }, [ho]);
-
-  // Section dirty check
-  const isSectionDirty = () => {
-    if (!originalConfig || !ho) return false;
-    const orig = originalConfig.hideoutOptions;
-    return JSON.stringify(orig) !== JSON.stringify(ho);
-  };
-
-  // Section reset
-  const resetSection = async () => {
-    if (!originalConfig || !filePath || !ipcRenderer) return;
-    const result = await ipcRenderer.invoke('patch-config-value', { filePath, path: ['hideoutOptions'], value: originalConfig.hideoutOptions });
-    if (!result.success) {
-      setError(result.error || 'Failed to reset section');
-      return;
-    }
-    setConfig(prev => ({ ...prev, hideoutOptions: JSON.parse(JSON.stringify(originalConfig.hideoutOptions)) }));
     setDirty(true);
-    setError('');
-    setTimeout(() => { saveConfig(); }, 0);
-  };
+  }, [setConfig, setDirty]);
 
+  const handleUndo = useCallback((key: string) => {
+    setConfig((prev: unknown) => {
+      const next = deepClone(prev);
+      setValue((next as Record<string, unknown>).hideoutOptions, key, getValue(original, key));
+      return next;
+    });
+    setDirty(true);
+  }, [setConfig, setDirty, original]);
 
-  // Generic handlers for number input fields
-  const handleNumberInput = (key: string) => (val: number | '') => {
-    if (val === '' || Number(val) >= 0) {
-      setLocalValues(prev => ({ ...prev, [key]: val }));
-      setError('');
-    } else {
-      setError('Value cannot be negative.');
-    }
-  };
-  const handleNumberBlur = (key: string, path: string[]) => () => {
-    patchValue(ipcRenderer, filePath, path, localValues[key], setConfig, setDirty, setError);
-  };
-  const handleNumberKey = (key: string, path: string[]) => (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      patchValue(ipcRenderer, filePath, path, localValues[key], setConfig, setDirty, setError);
-      (e.target as HTMLInputElement).blur();
-      setTimeout(() => { saveConfig(); }, 0);
-    }
-  };
-  const handleNumberReset = (key: string, path: string[]) => () => {
-    const orig = getOriginal(originalConfig, path) as number | '';
-    setLocalValues(prev => ({ ...prev, [key]: orig }));
-    patchValue(ipcRenderer, filePath, path, orig, setConfig, setDirty, setError);
-  };
+  // Section reset enabled if any field is changed
+  const sectionChanged = useMemo(() => {
+    return fields.some(field => getValue(ho, field.key) !== getValue(original, field.key));
+  }, [ho, original]);
 
   return (
     <div className="hideout-section">
-      <style>{`.switch { position: relative; display: inline-block; width: 46px; height: 26px; margin-left: 8px; vertical-align: middle; } .switch input { display: none; } .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .3s; border-radius: 26px; } .slider:before { position: absolute; content: ""; height: 17px; width: 17px; left: 5px; bottom: 4.5px; background-color: #fff; transition: .3s; border-radius: 50%; } input:checked + .slider { background-color: #2980d0; } input:checked + .slider:before { transform: translateX(18px); }`}</style>
       <div className="hideout-section-title-row">
-        <h2 className="hideout-section-title">Hideout Options</h2>
-        <SectionResetButton onReset={resetSection} enabled={isSectionDirty()} />
+        <div className="hideout-section-title">Hideout Options</div>
+        <SectionResetButton
+          onReset={() => {
+            setConfig((prev: unknown) => {
+              const next = deepClone(prev);
+              (next as Record<string, unknown>).hideoutOptions = deepClone(original);
+              return next;
+            });
+            setDirty(true);
+          }}
+          enabled={sectionChanged}
+        />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <div className="hideout-options-grid">
-          {/* Field config array for all toggles and number inputs */}
-          {[
-            {
-              type: 'toggle',
-              label: 'Faster Bitcoin Farming',
-              tooltip: 'Enable/disable faster bitcoin farming',
-              path: ['fasterBitcoinFarming', 'enabled'],
-              value: !!ho.fasterBitcoinFarming.enabled,
-              originalValue: !!getOriginal(originalConfig, ['fasterBitcoinFarming', 'enabled'])
-            },
-            {
-              type: 'number',
-              label: 'Bitcoin Price',
-              tooltip: 'Set the price of bitcoin in the handbook. Default is 100000. Set to null or remove to not change price.',
-              path: ['fasterBitcoinFarming', 'bitcoinPrice'],
-              value: localValues.btcPrice,
-              originalValue: getOriginal(originalConfig, ['fasterBitcoinFarming', 'bitcoinPrice']) as number | '',
-              key: 'btcPrice',
-            },
-            {
-              type: 'number',
-              label: 'Base Time Multiplier',
-              tooltip: 'Base time multiplier for bitcoin production. Lower = slower, higher = faster.',
-              path: ['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'],
-              value: localValues.btcTime,
-              originalValue: getOriginal(originalConfig, ['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier']) as number | '',
-              key: 'btcTime',
-            },
-            {
-              type: 'number',
-              label: 'GPU Efficiency',
-              tooltip: 'GPU efficiency for bitcoin farm. Higher = more bitcoin per GPU.',
-              path: ['fasterBitcoinFarming', 'gpuEfficiency'],
-              value: localValues.gpuEff,
-              originalValue: getOriginal(originalConfig, ['fasterBitcoinFarming', 'gpuEfficiency']) as number | '',
-              key: 'gpuEff',
-            },
-            {
-              type: 'toggle',
-              label: 'Faster Crafting Time',
-              tooltip: 'Enable/disable faster crafting time for all crafts except bitcoin, moonshine, and purified water',
-              path: ['fasterCraftingTime', 'enabled'],
-              value: !!ho.fasterCraftingTime.enabled,
-              originalValue: !!getOriginal(originalConfig, ['fasterCraftingTime', 'enabled'])
-            },
-            {
-              type: 'number',
-              label: 'Base Crafting Time Multiplier',
-              tooltip: 'Base time multiplier for all crafts except bitcoin, moonshine, and purified water. Higher = faster.',
-              path: ['fasterCraftingTime', 'baseCraftingTimeMultiplier'],
-              value: localValues.craftTime,
-              originalValue: getOriginal(originalConfig, ['fasterCraftingTime', 'baseCraftingTimeMultiplier']) as number | '',
-              key: 'craftTime',
-            },
-            {
-              type: 'toggle',
-              label: 'Hideout Containers Enabled',
-              tooltip: 'Enable/disable basic hideout containers (Medicine case, Holodilnick, Magazine case, Item case, Weapon case, Keytool)',
-              path: ['hideoutContainers', 'enabled'],
-              value: !!ho.hideoutContainers.enabled,
-              originalValue: !!getOriginal(originalConfig, ['hideoutContainers', 'enabled'])
-            },
-          ].map((field) => {
-            if (field.type === 'toggle') {
-              return (
-                <ConfigToggle
-                  key={field.label}
-                  checked={field.value as boolean}
-                  onChange={checked => patchValue(ipcRenderer, filePath, field.path as string[], checked, setConfig, setDirty, setError)}
-                  onReset={() => patchValue(ipcRenderer, filePath, field.path as string[], field.originalValue as boolean, setConfig, setDirty, setError)}
-                  resetEnabled={field.value !== field.originalValue}
-                  label={field.label}
-                  tooltip={field.tooltip}
-                />
-              );
-            } else if (field.type === 'number' && field.key) {
-              return (
-                <ConfigNumberInput
-                  key={field.label}
-                  value={field.value as number | ''}
-                  onChange={handleNumberInput(field.key)}
-                  onBlur={handleNumberBlur(field.key, field.path as string[])}
-                  onKeyDown={handleNumberKey(field.key, field.path as string[])}
-                  onReset={handleNumberReset(field.key, field.path as string[])}
-                  resetEnabled={field.value !== field.originalValue}
-                  label={field.label}
-                  tooltip={field.tooltip}
-                />
-              );
-            }
-            return null;
-          })}
-        </div>
+      <div className="hideout-options-grid" style={{ gridTemplateColumns: '1.2fr 1.5fr' }}>
+        {fields.map((field) => {
+          const value = getValue(ho, field.key);
+          const origValue = getValue(original, field.key);
+          const changed = value !== origValue;
+          return (
+            <React.Fragment key={field.key}>
+              <div className="config-label" style={{ justifySelf: 'start' }} title={field.tooltip}>{field.label}</div>
+              <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: 140 }}>
+                {field.type === 'toggle' ? (
+                  <ConfigToggle
+                    checked={!!value}
+                    onChange={v => handleChange(field.key, v)}
+                    onReset={() => handleUndo(field.key)}
+                    resetEnabled={changed}
+                    label=""
+                    tooltip={field.tooltip}
+                  />
+                ) : (
+                  (() => {
+                    let numValue: number | '' = '';
+                    if (typeof value === 'number') numValue = value;
+                    else if (value === null || value === undefined) numValue = '';
+                    return (
+                      <ConfigNumberInput
+                        value={numValue}
+                        onChange={v => handleChange(field.key, v)}
+                        onBlur={() => {}}
+                        onKeyDown={() => {}}
+                        onReset={() => handleUndo(field.key)}
+                        resetEnabled={changed}
+                        label=""
+                        tooltip={field.tooltip}
+                      />
+                    );
+                  })()
+                )}
+              </div>
+            </React.Fragment>
+          );
+        })}
       </div>
     </div>
   );

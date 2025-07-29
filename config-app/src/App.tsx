@@ -121,21 +121,19 @@ function App() {
     if (!config) return <div>Load a config file to begin.</div>;
     switch (section) {
       case 'hideoutOptions':
-        if (config && ipcRenderer) {
-          return (
-            <HideoutOptionsModule.default
-              ho={config.hideoutOptions}
-              originalConfig={originalConfig}
-              filePath={filePath}
-              ipcRenderer={ipcRenderer}
-              setConfig={setConfig}
-              setDirty={setDirty}
-              setError={setError}
-              saveConfig={saveConfig}
-            />
-          );
-        }
-        return null;
+        if (!originalConfig) return null;
+        return (
+          <HideoutOptionsModule.default
+            ho={config.hideoutOptions}
+            originalConfig={originalConfig as { hideoutOptions: import('./types/config').HideoutOptions }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
       // Add more cases for other sections
       default: return <div>Section not implemented yet.</div>;
     }
