@@ -5,9 +5,11 @@ import './AppStyles.css';
 import Sidebar from './components/Sidebar';
 import FileSavedAlert from './components/FileSavedAlert';
 import ErrorAlert from './components/ErrorAlert';
+
 import * as HideoutOptionsModule from './components/HideoutOptions';
 import * as StashOptionsModule from './components/StashOptions';
 import * as TraderChangesModule from './components/TraderChanges';
+import * as CraftingChangesModule from './components/CraftingChanges';
 
 declare global {
   interface Window {
@@ -156,6 +158,20 @@ function App() {
           <TraderChangesModule.default
             tc={config.traderChanges}
             originalConfig={originalConfig as unknown as { traderChanges: import('./types/config').Config['traderChanges'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'craftingChanges':
+        if (!originalConfig) return null;
+        return (
+          <CraftingChangesModule.default
+            cc={config.craftingChanges}
+            originalConfig={originalConfig as unknown as { craftingChanges: import('./types/config').Config['craftingChanges'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
