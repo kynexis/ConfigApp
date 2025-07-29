@@ -11,6 +11,7 @@ import * as StashOptionsModule from './components/StashOptions';
 import * as TraderChangesModule from './components/TraderChanges';
 import * as CraftingChangesModule from './components/CraftingChanges';
 import * as InsuranceChangesModule from './components/InsuranceChanges';
+import * as SecureContainersOptionsModule from './components/SecureContainersOptions';
 
 declare global {
   interface Window {
@@ -187,6 +188,20 @@ function App() {
           <InsuranceChangesModule.default
             ic={config.insuranceChanges}
             originalConfig={originalConfig as unknown as { insuranceChanges: import('./types/config').Config['insuranceChanges'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'secureContainersOptions':
+        if (!originalConfig) return null;
+        return (
+          <SecureContainersOptionsModule.default
+            sco={config.secureContainersOptions}
+            originalConfig={originalConfig as unknown as { secureContainersOptions: import('./types/config').Config['secureContainersOptions'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
