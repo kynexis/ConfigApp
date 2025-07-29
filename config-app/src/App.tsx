@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Config, HideoutOptions } from './types/config';
 import './App.css';
+import './AppStyles.css';
 
 // Toggle switch CSS (20% larger, input border matches toggle blue)
 const toggleStyle = `
@@ -171,13 +172,42 @@ function App() {
       return obj;
     };
 
-    // SVG Undo Icon
+    // SVG Undo Icons
     const UndoIcon = (
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{verticalAlign:'middle'}} xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 10V6M4 6H8M4 6L8.5 10.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M4 10C4 14 8 16 12 16C15 16 18 13 18 10C18 7 15 4 12 4C10.5 4 9.5 4.5 8.5 5.5" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M4 4V8H8" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M4 8C5.5 5.5 8 4 10.5 4C14.5 4 18 7.5 18 11.5C18 15.5 14.5 19 10.5 19C7.5 19 5 16.5 4 14" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     );
+    const UndoIconLarge = (
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{verticalAlign:'middle'}} xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 6V12H12" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 12C8 8.5 12 6 16 6C21 6 26 11 26 16C26 21 21 26 16 26C11.5 26 8 22.5 6 19" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
+      </svg>
+    );
+    // Helper: check if any field in hideoutOptions differs from original
+    const isSectionDirty = () => {
+      if (!originalConfig || !config) return false;
+      const orig = originalConfig.hideoutOptions;
+      const curr = config.hideoutOptions;
+      return JSON.stringify(orig) !== JSON.stringify(curr);
+    };
+
+    // Reset all hideout options to original values
+    const resetSection = async () => {
+      if (!originalConfig || !config) return;
+      if (!ipcRenderer || !filePath) return;
+      // Patch the entire hideoutOptions object
+      const result = await ipcRenderer.invoke('patch-config-value', { filePath, path: ['hideoutOptions'], value: originalConfig.hideoutOptions });
+      if (!result.success) {
+        setError(result.error || 'Failed to reset section');
+        return;
+      }
+      setConfig(prev => prev ? { ...prev, hideoutOptions: JSON.parse(JSON.stringify(originalConfig.hideoutOptions)) } : prev);
+      setDirty(true);
+      setError('');
+      setTimeout(() => { saveConfig(); }, 0);
+    };
     // Always call hooks first
     const ho: HideoutOptions | undefined = config?.hideoutOptions;
     const [btcPrice, setBtcPrice] = useState<number | ''>(ho ? (ho.fasterBitcoinFarming.bitcoinPrice ?? '') : '');
@@ -240,8 +270,6 @@ function App() {
 
     if (!ho) return <div>No Hideout Options found.</div>;
 
-    const labelStyle = { fontSize: 16, fontWeight: 500, textAlign: 'left' as const };
-    const inputStyle = { width: 120, height: 28, fontSize: 16, borderRadius: 6, background: '#181a1b', color: '#fff', padding: '2px 8px', justifySelf: 'end', outline: 'none', transition: 'border-color 0.2s' };
     // Helper to prevent negative input at the UI level
     const handleNumberInput = (setter: (v: number | '') => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
@@ -253,233 +281,158 @@ function App() {
       }
     };
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', background: 'rgba(0,0,0,0.10)', borderRadius: 12, padding: 32, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.10)' }}>
+      <div className="hideout-section">
         {/* Inject toggle switch CSS */}
         <style>{toggleStyle}</style>
-        <h2 style={{ textAlign: 'center', fontWeight: 700, marginBottom: 32, fontSize: 28 }}>Hideout Options</h2>
-
-        {/* Main grid: two columns, labels left, controls right */}
+        <div className="hideout-section-title-row">
+          <h2 className="hideout-section-title">Hideout Options</h2>
+          <div className="hideout-section-reset">
+            <span className={`hideout-section-reset-label${isSectionDirty() ? '' : ' disabled'}`}>Reset</span>
+            <button
+              className="hideout-section-reset-btn"
+              title="Reset all Hideout Options to original values"
+              disabled={!isSectionDirty()}
+              onClick={resetSection}
+            >
+              {UndoIconLarge}
+            </button>
+          </div>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: 420, display: 'grid', gridTemplateColumns: '1fr 1fr', rowGap: 18, columnGap: 24, alignItems: 'center' }}>
-            {/* Faster Bitcoin Farming */}
-            <span style={labelStyle} title="Enable/disable faster bitcoin farming">Faster Bitcoin Farming</span>
+          <div className="hideout-options-grid">
+            <span className="config-label" title="Enable/disable faster bitcoin farming">Faster Bitcoin Farming</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <label className="switch">
                 <input type="checkbox" checked={ho.fasterBitcoinFarming.enabled} onChange={e => patchValue(['fasterBitcoinFarming', 'enabled'], e.target.checked)} />
                 <span className="slider"></span>
               </label>
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: ho.fasterBitcoinFarming.enabled !== getOriginal(['fasterBitcoinFarming', 'enabled']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={ho.fasterBitcoinFarming.enabled === getOriginal(['fasterBitcoinFarming', 'enabled'])}
+                style={{ opacity: ho.fasterBitcoinFarming.enabled !== getOriginal(['fasterBitcoinFarming', 'enabled']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterBitcoinFarming', 'enabled'], getOriginal(['fasterBitcoinFarming', 'enabled']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            <span style={labelStyle} title="Set the price of bitcoin in the handbook. Default is 100000. Set to null or remove to not change price.">Bitcoin Price</span>
+            <span className="config-label" title="Set the price of bitcoin in the handbook. Default is 100000. Set to null or remove to not change price.">Bitcoin Price</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <input
                 type="number"
                 value={btcPrice}
-                style={inputStyle}
+                className="config-input"
                 min={0}
                 onChange={handleNumberInput(setBtcPrice)}
                 onBlur={() => patchValue(['fasterBitcoinFarming', 'bitcoinPrice'], btcPrice)}
                 onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'bitcoinPrice'], btcPrice))}
               />
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: btcPrice !== getOriginal(['fasterBitcoinFarming', 'bitcoinPrice']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={btcPrice === getOriginal(['fasterBitcoinFarming', 'bitcoinPrice'])}
+                style={{ opacity: btcPrice !== getOriginal(['fasterBitcoinFarming', 'bitcoinPrice']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterBitcoinFarming', 'bitcoinPrice'], getOriginal(['fasterBitcoinFarming', 'bitcoinPrice']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            <span style={labelStyle} title="Base time multiplier for bitcoin production. Lower = slower, higher = faster.">Base Time Multiplier</span>
+            <span className="config-label" title="Base time multiplier for bitcoin production. Lower = slower, higher = faster.">Base Time Multiplier</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <input
                 type="number"
                 value={btcTime}
-                style={inputStyle}
+                className="config-input"
                 min={0}
                 onChange={handleNumberInput(setBtcTime)}
                 onBlur={() => patchValue(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'], btcTime)}
                 onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'], btcTime))}
               />
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: btcTime !== getOriginal(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={btcTime === getOriginal(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'])}
+                style={{ opacity: btcTime !== getOriginal(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'], getOriginal(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            <span style={labelStyle} title="GPU efficiency for bitcoin farm. Higher = more bitcoin per GPU.">GPU Efficiency</span>
+            <span className="config-label" title="GPU efficiency for bitcoin farm. Higher = more bitcoin per GPU.">GPU Efficiency</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <input
                 type="number"
                 value={gpuEff}
-                style={inputStyle}
+                className="config-input"
                 min={0}
                 onChange={handleNumberInput(setGpuEff)}
                 onBlur={() => patchValue(['fasterBitcoinFarming', 'gpuEfficiency'], gpuEff)}
                 onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'gpuEfficiency'], gpuEff))}
               />
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: gpuEff !== getOriginal(['fasterBitcoinFarming', 'gpuEfficiency']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={gpuEff === getOriginal(['fasterBitcoinFarming', 'gpuEfficiency'])}
+                style={{ opacity: gpuEff !== getOriginal(['fasterBitcoinFarming', 'gpuEfficiency']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterBitcoinFarming', 'gpuEfficiency'], getOriginal(['fasterBitcoinFarming', 'gpuEfficiency']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            {/* Faster Crafting Time */}
-            <span style={labelStyle} title="Enable/disable faster crafting time for all crafts except bitcoin, moonshine, and purified water">Faster Crafting Time</span>
+            <span className="config-label" title="Enable/disable faster crafting time for all crafts except bitcoin, moonshine, and purified water">Faster Crafting Time</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <label className="switch">
                 <input type="checkbox" checked={ho.fasterCraftingTime.enabled} onChange={e => patchValue(['fasterCraftingTime', 'enabled'], e.target.checked)} />
                 <span className="slider"></span>
               </label>
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: ho.fasterCraftingTime.enabled !== getOriginal(['fasterCraftingTime', 'enabled']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={ho.fasterCraftingTime.enabled === getOriginal(['fasterCraftingTime', 'enabled'])}
+                style={{ opacity: ho.fasterCraftingTime.enabled !== getOriginal(['fasterCraftingTime', 'enabled']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterCraftingTime', 'enabled'], getOriginal(['fasterCraftingTime', 'enabled']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            <span style={labelStyle} title="Base time multiplier for all crafts except bitcoin, moonshine, and purified water. Higher = faster.">Base Crafting Time Multiplier</span>
+            <span className="config-label" title="Base time multiplier for all crafts except bitcoin, moonshine, and purified water. Higher = faster.">Base Crafting Time Multiplier</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <input
                 type="number"
                 value={craftTime}
-                style={inputStyle}
+                className="config-input"
                 min={0}
                 onChange={handleNumberInput(setCraftTime)}
                 onBlur={() => patchValue(['fasterCraftingTime', 'baseCraftingTimeMultiplier'], craftTime)}
                 onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterCraftingTime', 'baseCraftingTimeMultiplier'], craftTime))}
               />
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: craftTime !== getOriginal(['fasterCraftingTime', 'baseCraftingTimeMultiplier']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={craftTime === getOriginal(['fasterCraftingTime', 'baseCraftingTimeMultiplier'])}
+                style={{ opacity: craftTime !== getOriginal(['fasterCraftingTime', 'baseCraftingTimeMultiplier']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['fasterCraftingTime', 'baseCraftingTimeMultiplier'], getOriginal(['fasterCraftingTime', 'baseCraftingTimeMultiplier']));
                   setTimeout(() => { saveConfig(); }, 0);
                 }}
               >{UndoIcon}</button>
             </div>
-
-            {/* Hideout Containers Enabled */}
-            <span style={labelStyle} title="Enable/disable basic hideout containers (Medicine case, Holodilnick, Magazine case, Item case, Weapon case, Keytool)">Hideout Containers Enabled</span>
+            <span className="config-label" title="Enable/disable basic hideout containers (Medicine case, Holodilnick, Magazine case, Item case, Weapon case, Keytool)">Hideout Containers Enabled</span>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <label className="switch">
                 <input type="checkbox" checked={ho.hideoutContainers.enabled} onChange={e => patchValue(['hideoutContainers', 'enabled'], e.target.checked)} />
                 <span className="slider"></span>
               </label>
               <button
+                className="field-undo-btn"
                 title="Reset to original"
-                style={{
-                  position: 'absolute',
-                  right: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  opacity: ho.hideoutContainers.enabled !== getOriginal(['hideoutContainers', 'enabled']) ? 1 : 0.25,
-                  pointerEvents: 'auto',
-                  transition: 'opacity 0.2s',
-                }}
                 disabled={ho.hideoutContainers.enabled === getOriginal(['hideoutContainers', 'enabled'])}
+                style={{ opacity: ho.hideoutContainers.enabled !== getOriginal(['hideoutContainers', 'enabled']) ? 1 : 0.25 }}
                 onClick={() => {
                   patchValue(['hideoutContainers', 'enabled'], getOriginal(['hideoutContainers', 'enabled']));
                   setTimeout(() => { saveConfig(); }, 0);
@@ -488,8 +441,6 @@ function App() {
             </div>
           </div>
         </div>
-
-        {/* Add more fields as needed for other hideout options */}
       </div>
     );
   }
@@ -505,88 +456,36 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', width: '100vw', position: 'relative', background: '#222' }}>
-      {/* Sidebar: fixed, detached, transparent */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: 240,
-          height: '100vh',
-          background: 'rgba(24,24,24,0.6)',
-          color: '#fff',
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 10,
-          boxShadow: '2px 0 12px 0 rgba(0,0,0,0.25)',
-          backdropFilter: 'blur(4px)'
-        }}
-      >
-        <h2 style={{ fontSize: 20, marginBottom: 24 }}>SoftcoreRedux</h2>
+      <div className="app-sidebar">
+        <h2>SoftcoreRedux</h2>
         {sections.map(s => (
-          <button key={s.key} style={{ marginBottom: 8, background: section === s.key ? '#333' : undefined, color: '#fff', textAlign: 'left', width: '100%' }} onClick={() => setSection(s.key)}>
+          <button
+            key={s.key}
+            className={`sidebar-section-btn${section === s.key ? ' active' : ''}`}
+            onClick={() => setSection(s.key)}
+          >
             {s.label}
           </button>
         ))}
         <div style={{ marginTop: 'auto' }}>
-          <button onClick={openConfig} style={{ width: '100%', marginBottom: 8 }}>Open Config</button>
-          <button onClick={saveConfig} disabled={!filePath || !config} style={{ width: '100%' }}>Save Config</button>
+          <button className="sidebar-bottom-btn" onClick={openConfig}>Open Config</button>
+          <button className="sidebar-bottom-btn" onClick={saveConfig} disabled={!filePath || !config}>Save Config</button>
         </div>
-        {filePath && <div style={{ fontSize: 12, marginTop: 8, wordBreak: 'break-all' }}><b>File:</b> {filePath}</div>}
-        {error && <div style={{ color: 'red', fontSize: 12 }}>{error}</div>}
+        {filePath && <div className="sidebar-filepath"><b>File:</b> {filePath}</div>}
+        {error && <div className="sidebar-error">{error}</div>}
       </div>
-      {/* Main view: margin-left to make space for sidebar */}
-      <div
-        style={{
-          marginLeft: 240,
-          minHeight: '100vh',
-          background: '#222',
-          color: '#fff',
-          padding: 32,
-          overflow: 'auto',
-        }}
-      >
-        {/* Prominent error alert at the top */}
+      <div className="app-main">
         {error && (
-          <div style={{
-            background: 'rgba(200,40,40,0.90)',
-            color: '#fff',
-            padding: '14px 24px',
-            borderRadius: 10,
-            fontWeight: 600,
-            fontSize: 16,
-            marginBottom: 24,
-            boxShadow: '0 2px 12px 0 rgba(0,0,0,0.15)',
-            maxWidth: 600,
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            textAlign: 'center',
-          }}>
+          <div className="app-error-alert">
             {error}
           </div>
         )}
         {renderSection()}
       </div>
-      {/* File Saved Alert */}
       {showSaved && (
         <div
-          style={{
-            position: 'fixed',
-            right: 32,
-            bottom: 32,
-            background: 'rgba(41, 114, 163, 0.55)',
-            color: '#e4e9ebda',
-            padding: '12px 24px',
-            borderRadius: 16,
-            fontWeight: 600,
-            fontSize: 18,
-            boxShadow: '0 4px 24px 0 rgba(0,0,0,0.12)',
-            zIndex: 1000,
-            transition: 'opacity 0.6s',
-            pointerEvents: 'none',
-            opacity: fadeSaved ? 0 : 1,
-          }}
+          className="file-saved-alert"
+          style={{ opacity: fadeSaved ? 0 : 1 }}
         >
           File Saved!
         </div>
