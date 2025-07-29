@@ -10,6 +10,7 @@ import * as HideoutOptionsModule from './components/HideoutOptions';
 import * as StashOptionsModule from './components/StashOptions';
 import * as TraderChangesModule from './components/TraderChanges';
 import * as CraftingChangesModule from './components/CraftingChanges';
+import * as InsuranceChangesModule from './components/InsuranceChanges';
 
 declare global {
   interface Window {
@@ -180,7 +181,20 @@ function App() {
             saveConfig={saveConfig}
           />
         );
-      // Add more cases for other sections
+      case 'insuranceChanges':
+        if (!originalConfig) return null;
+        return (
+          <InsuranceChangesModule.default
+            ic={config.insuranceChanges}
+            originalConfig={originalConfig as unknown as { insuranceChanges: import('./types/config').Config['insuranceChanges'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
       default: return <div>Section not implemented yet.</div>;
     }
   }
