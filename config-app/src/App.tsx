@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { Config, HideoutOptions } from './types/config';
 import './App.css';
 
 // Toggle switch CSS (20% larger, input border matches toggle blue)
@@ -58,7 +59,7 @@ const ipcRenderer = electron ? electron.ipcRenderer : null;
 
 
 function App() {
-  const [config, setConfig] = useState<any>(null);
+  const [config, setConfig] = useState<Config | null>(null);
   const [filePath, setFilePath] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [section, setSection] = useState<string>('hideoutOptions');
@@ -157,39 +158,52 @@ function App() {
   // Example: Hardcoded UI for Hideout Options
   function HideoutOptions() {
     // Always call hooks first
-    const ho = config?.hideoutOptions;
-    const [btcPrice, setBtcPrice] = useState(ho ? ho.fasterBitcoinFarming.bitcoinPrice : '');
-    const [btcTime, setBtcTime] = useState(ho ? ho.fasterBitcoinFarming.baseBitcoinTimeMultiplier : '');
-    const [gpuEff, setGpuEff] = useState(ho ? ho.fasterBitcoinFarming.gpuEfficiency : '');
-    const [craftTime, setCraftTime] = useState(ho ? ho.fasterCraftingTime.baseCraftingTimeMultiplier : '');
+    const ho: HideoutOptions | undefined = config?.hideoutOptions;
+    const [btcPrice, setBtcPrice] = useState<number | ''>(ho ? (ho.fasterBitcoinFarming.bitcoinPrice ?? '') : '');
+    const [btcTime, setBtcTime] = useState<number | ''>(ho ? ho.fasterBitcoinFarming.baseBitcoinTimeMultiplier : '');
+    const [gpuEff, setGpuEff] = useState<number | ''>(ho ? ho.fasterBitcoinFarming.gpuEfficiency : '');
+    const [craftTime, setCraftTime] = useState<number | ''>(ho ? ho.fasterCraftingTime.baseCraftingTimeMultiplier : '');
 
     useEffect(() => {
       if (!ho) return;
-      setBtcPrice(ho.fasterBitcoinFarming.bitcoinPrice);
+      setBtcPrice(ho.fasterBitcoinFarming.bitcoinPrice ?? '');
       setBtcTime(ho.fasterBitcoinFarming.baseBitcoinTimeMultiplier);
       setGpuEff(ho.fasterBitcoinFarming.gpuEfficiency);
       setCraftTime(ho.fasterCraftingTime.baseCraftingTimeMultiplier);
     }, [ho?.fasterBitcoinFarming.bitcoinPrice, ho?.fasterBitcoinFarming.baseBitcoinTimeMultiplier, ho?.fasterBitcoinFarming.gpuEfficiency, ho?.fasterCraftingTime.baseCraftingTimeMultiplier]);
 
     // Patch config value via IPC, then update local state, and mark dirty
-    const patchValue = async (path: string[], value: any) => {
+    const patchValue = async (path: string[], value: unknown) => {
+      // Validate number fields: prevent negative values
+      const numberFields = [
+        'bitcoinPrice',
+        'baseBitcoinTimeMultiplier',
+        'gpuEfficiency',
+        'baseCraftingTimeMultiplier',
+      ];
+      if (numberFields.includes(path[path.length - 1]) && typeof value === 'number' && value < 0) {
+        setError('Value cannot be negative.');
+        return;
+      }
       if (!ipcRenderer || !filePath) return;
       const result = await ipcRenderer.invoke('patch-config-value', { filePath, path: ['hideoutOptions', ...path], value });
       if (!result.success) {
         setError(result.error || 'Failed to update config');
         return;
       }
-      setConfig((prev: any) => {
+      setConfig((prev) => {
+        if (!prev) return prev;
         const next = { ...prev };
-        let obj = next.hideoutOptions;
+        let obj: Record<string, unknown> = next.hideoutOptions as unknown as Record<string, unknown>;
         for (let i = 0; i < path.length - 1; ++i) {
-          if (obj[path[i]] === undefined) return prev;
-          obj = obj[path[i]];
+          if (typeof obj[path[i]] !== 'object' || obj[path[i]] === undefined || obj[path[i]] === null) return prev;
+          obj = obj[path[i]] as Record<string, unknown>;
         }
         obj[path[path.length - 1]] = value;
         return next;
       });
       setDirty(true);
+      setError('');
     };
 
     // Helper for Enter key: patch value, blur, and trigger immediate save
@@ -197,7 +211,6 @@ function App() {
       if (e.key === 'Enter') {
         patch();
         (e.target as HTMLInputElement).blur();
-        // Immediately save config after Enter
         setTimeout(() => {
           saveConfig();
         }, 0);
@@ -208,6 +221,16 @@ function App() {
 
     const labelStyle = { fontSize: 16, fontWeight: 500, textAlign: 'left' as const };
     const inputStyle = { width: 120, height: 28, fontSize: 16, borderRadius: 6, background: '#181a1b', color: '#fff', padding: '2px 8px', justifySelf: 'end', outline: 'none', transition: 'border-color 0.2s' };
+    // Helper to prevent negative input at the UI level
+    const handleNumberInput = (setter: (v: number | '') => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      if (val === '' || Number(val) >= 0) {
+        setter(val === '' ? '' : Number(val));
+        setError('');
+      } else {
+        setError('Value cannot be negative.');
+      }
+    };
     return (
       <div style={{ maxWidth: 520, margin: '0 auto', background: 'rgba(0,0,0,0.10)', borderRadius: 12, padding: 32, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.10)' }}>
         {/* Inject toggle switch CSS */}
@@ -229,7 +252,8 @@ function App() {
               type="number"
               value={btcPrice}
               style={inputStyle}
-              onChange={e => setBtcPrice(e.target.value === '' ? '' : Number(e.target.value))}
+              min={0}
+              onChange={handleNumberInput(setBtcPrice)}
               onBlur={() => patchValue(['fasterBitcoinFarming', 'bitcoinPrice'], btcPrice)}
               onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'bitcoinPrice'], btcPrice))}
             />
@@ -239,7 +263,8 @@ function App() {
               type="number"
               value={btcTime}
               style={inputStyle}
-              onChange={e => setBtcTime(e.target.value === '' ? '' : Number(e.target.value))}
+              min={0}
+              onChange={handleNumberInput(setBtcTime)}
               onBlur={() => patchValue(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'], btcTime)}
               onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'baseBitcoinTimeMultiplier'], btcTime))}
             />
@@ -249,7 +274,8 @@ function App() {
               type="number"
               value={gpuEff}
               style={inputStyle}
-              onChange={e => setGpuEff(e.target.value === '' ? '' : Number(e.target.value))}
+              min={0}
+              onChange={handleNumberInput(setGpuEff)}
               onBlur={() => patchValue(['fasterBitcoinFarming', 'gpuEfficiency'], gpuEff)}
               onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterBitcoinFarming', 'gpuEfficiency'], gpuEff))}
             />
@@ -266,7 +292,8 @@ function App() {
               type="number"
               value={craftTime}
               style={inputStyle}
-              onChange={e => setCraftTime(e.target.value === '' ? '' : Number(e.target.value))}
+              min={0}
+              onChange={handleNumberInput(setCraftTime)}
               onBlur={() => patchValue(['fasterCraftingTime', 'baseCraftingTimeMultiplier'], craftTime)}
               onKeyDown={e => handleNumberKey(e, () => patchValue(['fasterCraftingTime', 'baseCraftingTimeMultiplier'], craftTime))}
             />
@@ -338,6 +365,25 @@ function App() {
           overflow: 'auto',
         }}
       >
+        {/* Prominent error alert at the top */}
+        {error && (
+          <div style={{
+            background: 'rgba(200,40,40,0.90)',
+            color: '#fff',
+            padding: '14px 24px',
+            borderRadius: 10,
+            fontWeight: 600,
+            fontSize: 16,
+            marginBottom: 24,
+            boxShadow: '0 2px 12px 0 rgba(0,0,0,0.15)',
+            maxWidth: 600,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            textAlign: 'center',
+          }}>
+            {error}
+          </div>
+        )}
         {renderSection()}
       </div>
       {/* File Saved Alert */}
