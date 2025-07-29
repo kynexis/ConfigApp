@@ -13,6 +13,7 @@ import * as CraftingChangesModule from './components/CraftingChanges';
 import * as InsuranceChangesModule from './components/InsuranceChanges';
 import * as SecureContainersOptionsModule from './components/SecureContainersOptions';
 import * as EconomyOptionsModule from './components/EconomyOptions';
+import * as OtherTweaksModule from './components/OtherTweaks';
 
 declare global {
   interface Window {
@@ -217,6 +218,20 @@ function App() {
           <EconomyOptionsModule.default
             eo={config.economyOptions}
             originalConfig={originalConfig as unknown as { economyOptions: import('./types/config').Config['economyOptions'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'otherTweaks':
+        if (!originalConfig) return null;
+        return (
+          <OtherTweaksModule.default
+            ot={config.otherTweaks}
+            originalConfig={originalConfig as unknown as { otherTweaks: import('./types/config').Config['otherTweaks'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
