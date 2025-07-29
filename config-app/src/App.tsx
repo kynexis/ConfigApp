@@ -12,6 +12,7 @@ import * as TraderChangesModule from './components/TraderChanges';
 import * as CraftingChangesModule from './components/CraftingChanges';
 import * as InsuranceChangesModule from './components/InsuranceChanges';
 import * as SecureContainersOptionsModule from './components/SecureContainersOptions';
+import * as EconomyOptionsModule from './components/EconomyOptions';
 
 declare global {
   interface Window {
@@ -202,6 +203,20 @@ function App() {
           <SecureContainersOptionsModule.default
             sco={config.secureContainersOptions}
             originalConfig={originalConfig as unknown as { secureContainersOptions: import('./types/config').Config['secureContainersOptions'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'economyOptions':
+        if (!originalConfig) return null;
+        return (
+          <EconomyOptionsModule.default
+            eo={config.economyOptions}
+            originalConfig={originalConfig as unknown as { economyOptions: import('./types/config').Config['economyOptions'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
