@@ -5,7 +5,7 @@ import './AppStyles.css';
 import Sidebar from './components/Sidebar';
 import FileSavedAlert from './components/FileSavedAlert';
 import ErrorAlert from './components/ErrorAlert';
-import HideoutOptions from './components/HideoutOptions';
+import * as HideoutOptionsModule from './components/HideoutOptions';
 
 declare global {
   interface Window {
@@ -123,7 +123,7 @@ function App() {
       case 'hideoutOptions':
         if (config && ipcRenderer) {
           return (
-            <HideoutOptions
+            <HideoutOptionsModule.default
               ho={config.hideoutOptions}
               originalConfig={originalConfig}
               filePath={filePath}
