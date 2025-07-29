@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar';
 import FileSavedAlert from './components/FileSavedAlert';
 import ErrorAlert from './components/ErrorAlert';
 import * as HideoutOptionsModule from './components/HideoutOptions';
+import * as StashOptionsModule from './components/StashOptions';
 
 declare global {
   interface Window {
@@ -126,6 +127,20 @@ function App() {
           <HideoutOptionsModule.default
             ho={config.hideoutOptions}
             originalConfig={originalConfig as { hideoutOptions: import('./types/config').HideoutOptions }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'stashOptions':
+        if (!originalConfig) return null;
+        return (
+          <StashOptionsModule.default
+            so={config.stashOptions}
+            originalConfig={originalConfig as unknown as { stashOptions: import('./types/config').Config['stashOptions'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
