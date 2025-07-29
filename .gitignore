@@ -1,0 +1,7 @@
+node_modules/
+dist/
+config-app/node_modules/
+config-app/dist/
+*.log
+.env
+.DS_Store
