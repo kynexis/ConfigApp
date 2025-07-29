@@ -7,6 +7,7 @@ import FileSavedAlert from './components/FileSavedAlert';
 import ErrorAlert from './components/ErrorAlert';
 import * as HideoutOptionsModule from './components/HideoutOptions';
 import * as StashOptionsModule from './components/StashOptions';
+import * as TraderChangesModule from './components/TraderChanges';
 
 declare global {
   interface Window {
@@ -141,6 +142,20 @@ function App() {
           <StashOptionsModule.default
             so={config.stashOptions}
             originalConfig={originalConfig as unknown as { stashOptions: import('./types/config').Config['stashOptions'] }}
+            filePath={filePath}
+            ipcRenderer={ipcRenderer}
+            setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
+            setDirty={setDirty}
+            setError={setError}
+            saveConfig={saveConfig}
+          />
+        );
+      case 'traderChanges':
+        if (!originalConfig) return null;
+        return (
+          <TraderChangesModule.default
+            tc={config.traderChanges}
+            originalConfig={originalConfig as unknown as { traderChanges: import('./types/config').Config['traderChanges'] }}
             filePath={filePath}
             ipcRenderer={ipcRenderer}
             setConfig={setConfig as unknown as (fn: (prev: unknown) => unknown) => void}
